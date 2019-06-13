@@ -14,7 +14,19 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> pf = new List<Account>();
         List<Account> pj = new List<Account>();
 
+        acct = addAccountsFromOrg(orgs, acct);
 
+        pf = splitAccounts(acct, 'pf');
+
+        pj = splitAccounts(acct, 'pj');
+
+        upsertAccounts(pf, pj);
+
+        updateLastSync(orgs);
+    }    
+    global void finish(Database.BatchableContext bc){} 
+
+    public static List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct) {
         for(IntegrationSetup__c a : orgs) {    
             
             Http http = new Http();
@@ -39,74 +51,61 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
             }       
         }
-        Integer contador = 0;
-        for(Account ac : acct) {
-            ac.Id = null;
-            if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
-                pf.add(ac);
-                contador = contador + 1;
-            }
-            else {
-                pj.add(ac);
-                contador = contador + 1;
+        return acct;
+    }
+    public static List<Account> splitAccounts(List<Account> acct, String type) {
+        List<Account> separated = new List<Account>();
+        if(type.equals('pf')) {
+            for(Account ac : acct) {
+                if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
+                separated.add(ac);
+                }
             }
         }
-
-        upsertAccounts(pf, pj, contador);
-
-        /* try {
+        if(type.equals('pj')) {
+            for(Account ac : acct) {
+                if(ac.Tipo__c == 'Pessoa Jurídica' || ac.Tipo__c == 'PessoaJuridica') {
+                    separated.add(ac);
+                }
+            }
+        }
+        return separated;
+    }
+    public static void upsertAccounts(List<Account> pf, List<Account> pj) {
+        try {
             System.debug('pj: '+pj);
+
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
+
             System.debug('adds '+pjAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            update orgs;
+            System.debug('Contas a adicionar: ' + pj.size());
+            //update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CNPJ failed '+ e.getMessage());
         }
         try {
             System.debug('pf: '+pf);
+
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
+
             System.debug('adds '+pfAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            update orgs;
+            System.debug('Contas a adicionar: ' + pf.size());
+            //update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CPF failed '+ e.getMessage());
-        } */
-    }    
-    global void finish(Database.BatchableContext bc){} 
-
+        }
+    }
+    public static void updateLastSync(List<IntegrationSetup__c> orgs) {
+        for(IntegrationSetup__c a : orgs) {
+            a.LastSync__c = System.now();
+        }
+    }
     global void execute(SchedulableContext sc) {
         Database.executeBatch(this);
     }
-
-    public static void upsertAccounts(List<Account> pf, List<Account> pj, Integer contador) {
-        try {
-            System.debug('pj: '+pj);
-            Schema.SObjectField loadpj = Account.CNPJ__c;
-            Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
-            System.debug('adds '+pjAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
-        }
-        catch(Exception e) {
-            System.debug('Upsert CNPJ failed '+ e.getMessage());
-        }
-        try {
-            System.debug('pf: '+pf);
-            Schema.SObjectField loadpf = Account.CPF__c;
-            Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
-            System.debug('adds '+pfAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
-        }
-        catch(Exception e) {
-            System.debug('Upsert CPF failed '+ e.getMessage());
-        }
-    }
- 
 }
 
