@@ -1,6 +1,7 @@
-global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable {
+global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable, Database.stateful {
 
-    //public Boolean isFinished = true;
+    global Boolean isFinished = true;
+    global Integer numCallouts = 0;
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         System.debug('Start');
@@ -18,17 +19,20 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> pj = new List<Account>();
         String pftipo = 'pf';
         String pjtipo = 'pj';
+        Integer page = 0;
+        
+        acct = addAccountsFromOrg(orgs, acct, page);
 
-        acct = addAccountsFromOrg(orgs, acct);
+        System.debug('Contas a adicionar: ' + acct.size());
 
         pf = splitAccounts(acct, pftipo);
 
         pj = splitAccounts(acct, pjtipo);
-
-        upsertAccounts(pf, pj);
+        
+        System.debug('callouts: ' + numCallouts);
+        //upsertAccounts(pf, pj);
 
         //updateLastSync(orgs);
-
     }    
     global void finish(Database.BatchableContext bc){
         /* if(isFinished == false) {
@@ -38,30 +42,44 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
     global void execute(SchedulableContext sc) {
         Database.executeBatch(this);
     }
-    public static List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct) {
+    public List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct, Integer page) {
         for(IntegrationSetup__c a : orgs) {    
 
             Http http = new Http();
             HttpRequest req =  new HttpRequest();
             HttpResponse res = new HttpResponse();
-            
-            if(a.LastSync__c != null) {
-                req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '?Pagina=' + '1');    
-            }
-            else {
-                req.setEndpoint(a.EndPointURL__c + '?Pagina=5');    
-            }
-            System.debug('endpoint: '+ req.getEndpoint());
+            Boolean hasNext = true;
 
-            req.setMethod('GET');
-            req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
-            
-            res = http.send(req);
+            for(; numCallouts < 100; numCallouts++) {
+                List<Account> found = new List<Account>();
+                if(a.LastSync__c != null) {
+                    req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
+                }
+                else {
+                    req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
+                }
 
-            if(res.getStatusCode() == 200) { 
-                System.debug('Status 200');
-                acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-            }   
+                System.debug('Number of callouts: ' + numCallouts);
+
+                System.debug('endpoint: '+ req.getEndpoint());
+
+                req.setMethod('GET');
+                req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
+                
+                res = http.send(req);
+
+                if(res.getStatusCode() == 200) { 
+                    System.debug('Status 200');
+                    found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+                    acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+                } 
+
+                page += 1;
+
+                /* if(found.size() == 0 || numCallouts > 50) {
+                    hasNext = false;
+                } */
+            }
         }
         return acct;
     }
@@ -70,7 +88,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         if(type.equals('pf')) {
             for(Account ac : acct) {
                 ac.Id = null;
-                System.debug('Nome'+ ac.name);
+                //System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
                     separated.add(ac);
                 }
@@ -79,7 +97,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         if(type.equals('pj')) {
             for(Account ac : acct) {
                 ac.Id = null;
-                System.debug('Nome'+ ac.name);
+                //System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Jurídica' || ac.Tipo__c == 'PessoaJuridica') {
                     separated.add(ac);
                 }
@@ -87,14 +105,14 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         return separated;
     }
-    public static void upsertAccounts(List<Account> pf, List<Account> pj) {
+    /* public static void upsertAccounts(List<Account> pf, List<Account> pj) {
         try {
             System.debug('pj: '+pj);
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
             System.debug('adds '+pjAdd);
-            //System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
+            System.debug('Contas a adicionar: ' + contador);
+            update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CNPJ failed '+ e.getMessage());
@@ -104,13 +122,13 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
             System.debug('adds '+pfAdd);
-            //System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
+            System.debug('Contas a adicionar: ' + contador);
+            update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CPF failed '+ e.getMessage());
         }
-    }
+    } */
     public static void updateLastSync(List<IntegrationSetup__c> orgs) {
         for(IntegrationSetup__c a : orgs) {
             a.LastSync__c = System.now();
