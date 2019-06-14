@@ -12,15 +12,14 @@ global with sharing class AccountLoader {
         List<Account> result = new List<Account>();
 
         if(pagina == null) {
+            System.debug('Pagina 0');
             numPage = 0;
         }
-
-        if(numPage != null && numPage != 0) {
-            offSet = Integer.valueOf(pagina) * limitLoad;
-        }
         else {
-            offSet = 0; 
+            numPage = Integer.valueOf(pagina);
         }
+
+        offSet = numPage * limitload;
 
         try {
             result =  [SELECT Tipo__c,CNPJ__c,CPF__c,LastUpdate__c,SystemModStamp,Name FROM Account WHERE SystemModStamp >= :Datetime.valueOfGmt(LastSync) ORDER BY SystemModStamp  ASC LIMIT :limitLoad OFFSET :offSet];

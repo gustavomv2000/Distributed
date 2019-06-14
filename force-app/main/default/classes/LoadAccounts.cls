@@ -1,7 +1,7 @@
 global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable {
-    
+
     //public Boolean isFinished = true;
-    
+
     global Database.QueryLocator start(Database.BatchableContext bc) {
         System.debug('Start');
 
@@ -16,25 +16,29 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> acct = new List<Account>();
         List<Account> pf = new List<Account>();
         List<Account> pj = new List<Account>();
+        String pftipo = 'pf';
+        String pjtipo = 'pj';
 
         acct = addAccountsFromOrg(orgs, acct);
 
-        pf = splitAccounts(acct, 'pf');
+        pf = splitAccounts(acct, pftipo);
 
-        pj = splitAccounts(acct, 'pj');
+        pj = splitAccounts(acct, pjtipo);
 
         upsertAccounts(pf, pj);
 
-        updateLastSync(orgs);
+        //updateLastSync(orgs);
+
     }    
     global void finish(Database.BatchableContext bc){
         /* if(isFinished == false) {
             Database.executeBatch(new LoadAccounts(),1);
         } */
     } 
-
+    global void execute(SchedulableContext sc) {
+        Database.executeBatch(this);
+    }
     public static List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct) {
-        
         for(IntegrationSetup__c a : orgs) {    
 
             Http http = new Http();
@@ -42,10 +46,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
             HttpResponse res = new HttpResponse();
             
             if(a.LastSync__c != null) {
-                req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8'));    
+                req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '?Pagina=' + '1');    
             }
             else {
-                req.setEndpoint(a.EndPointURL__c);    
+                req.setEndpoint(a.EndPointURL__c + '?Pagina=5');    
             }
             System.debug('endpoint: '+ req.getEndpoint());
 
@@ -58,9 +62,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 System.debug('Status 200');
                 acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
             }   
-            else {
-                System.debug('Erro!');
-            }    
         }
         return acct;
     }
@@ -68,14 +69,17 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> separated = new List<Account>();
         if(type.equals('pf')) {
             for(Account ac : acct) {
+                ac.Id = null;
                 System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
-                separated.add(ac);
+                    separated.add(ac);
                 }
             }
         }
         if(type.equals('pj')) {
             for(Account ac : acct) {
+                ac.Id = null;
+                System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Jurídica' || ac.Tipo__c == 'PessoaJuridica') {
                     separated.add(ac);
                 }
@@ -86,14 +90,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
     public static void upsertAccounts(List<Account> pf, List<Account> pj) {
         try {
             System.debug('pj: '+pj);
-
-            System.debug('Antes upsert');
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
-            System.debug('Depois upsert');
-
             System.debug('adds '+pjAdd);
-            System.debug('Contas a adicionar: ' + pj.size());
+            //System.debug('Contas a adicionar: ' + contador);
             //update orgs;
         }
         catch(Exception e) {
@@ -101,14 +101,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         try {
             System.debug('pf: '+pf);
-
-            System.debug('Antes upsert');
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
-            System.debug('Depois upsert');
-
             System.debug('adds '+pfAdd);
-            System.debug('Contas a adicionar: ' + pf.size());
+            //System.debug('Contas a adicionar: ' + contador);
             //update orgs;
         }
         catch(Exception e) {
@@ -121,8 +117,4 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         update orgs;
     }
-    global void execute(SchedulableContext sc) {
-        Database.executeBatch(this);
-    }
 }
-

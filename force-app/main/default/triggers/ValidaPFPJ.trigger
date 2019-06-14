@@ -9,7 +9,6 @@ trigger ValidaPFPJ on Account (before insert, before update) {
             }
             else {    
                 if(Valida.validaCPF(a.CPF__c)) {
-                    a.LastUpdate__c = system.now();
                     a.CNPJ__c = null;
                     a.CPF__c = a.CPF__c.replaceAll('\\D','');  
                     a.CPF__c = Valida.formatCPF(a.CPF__c);
@@ -25,7 +24,6 @@ trigger ValidaPFPJ on Account (before insert, before update) {
             }
             else {
                 if(Valida.validaCNPJ(a.CNPJ__c)) {
-                    a.LastUpdate__c = system.now();
                     a.CPF__c = null;
                     a.CNPJ__c = a.CNPJ__c.replaceAll('\\D','');
                     System.debug('Linha 34');
