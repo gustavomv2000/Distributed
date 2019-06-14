@@ -1,4 +1,7 @@
 global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable {
+    
+    //public Boolean isFinished = true;
+    
     global Database.QueryLocator start(Database.BatchableContext bc) {
         System.debug('Start');
 
@@ -24,11 +27,16 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
 
         updateLastSync(orgs);
     }    
-    global void finish(Database.BatchableContext bc){} 
+    global void finish(Database.BatchableContext bc){
+        /* if(isFinished == false) {
+            Database.executeBatch(new LoadAccounts(),1);
+        } */
+    } 
 
     public static List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct) {
+        
         for(IntegrationSetup__c a : orgs) {    
-            
+
             Http http = new Http();
             HttpRequest req =  new HttpRequest();
             HttpResponse res = new HttpResponse();
@@ -40,7 +48,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 req.setEndpoint(a.EndPointURL__c);    
             }
             System.debug('endpoint: '+ req.getEndpoint());
-            a.LastSync__c = Datetime.now();
 
             req.setMethod('GET');
             req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
@@ -48,8 +55,12 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
             res = http.send(req);
 
             if(res.getStatusCode() == 200) { 
+                System.debug('Status 200');
                 acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-            }       
+            }   
+            else {
+                System.debug('Erro!');
+            }    
         }
         return acct;
     }
@@ -57,6 +68,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> separated = new List<Account>();
         if(type.equals('pf')) {
             for(Account ac : acct) {
+                System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
                 separated.add(ac);
                 }
@@ -75,8 +87,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         try {
             System.debug('pj: '+pj);
 
+            System.debug('Antes upsert');
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
+            System.debug('Depois upsert');
 
             System.debug('adds '+pjAdd);
             System.debug('Contas a adicionar: ' + pj.size());
@@ -88,8 +102,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         try {
             System.debug('pf: '+pf);
 
+            System.debug('Antes upsert');
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
+            System.debug('Depois upsert');
 
             System.debug('adds '+pfAdd);
             System.debug('Contas a adicionar: ' + pf.size());
@@ -103,6 +119,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         for(IntegrationSetup__c a : orgs) {
             a.LastSync__c = System.now();
         }
+        update orgs;
     }
     global void execute(SchedulableContext sc) {
         Database.executeBatch(this);

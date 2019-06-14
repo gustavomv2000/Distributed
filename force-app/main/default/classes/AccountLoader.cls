@@ -5,16 +5,21 @@ global with sharing class AccountLoader {
         
         RestRequest request = RestContext.request;
         String LastSync = request.params.get('LastSync');
-        Integer pagina = Integer.valueOf(request.params.get('Pagina'));
+        String pagina = request.params.get('Pagina');
+        Integer numPage;
         Integer offSet = 0;
         Integer limitLoad = 50;
         List<Account> result = new List<Account>();
 
-        if(pagina != 0 && pagina > 0) {
-            offSet = pagina * limitLoad;
+        if(pagina == null) {
+            numPage = 0;
+        }
+
+        if(numPage != null && numPage != 0) {
+            offSet = Integer.valueOf(pagina) * limitLoad;
         }
         else {
-            pagina = 0;
+            offSet = 0; 
         }
 
         try {
