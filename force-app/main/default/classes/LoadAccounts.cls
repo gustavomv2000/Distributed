@@ -1,6 +1,8 @@
 global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable, Database.stateful {
 
     global Auxiliar saved = new Auxiliar();
+    global Integer limitCallouts = 2;
+    global List<Account> acct = new List<Account>();
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         System.debug('Start');
@@ -12,8 +14,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         return Database.getQueryLocator(query);
     }
     global void execute(Database.BatchableContext bc, List<IntegrationSetup__c> orgs){
-        List<Account> acc = new List<Account>();
-        List<Account> acct = new List<Account>();
         List<Account> pf = new List<Account>();
         List<Account> pj = new List<Account>();
         String pftipo = 'pf';
@@ -29,6 +29,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         pj = splitAccounts(acct, pjtipo);
         
         System.debug('callouts: ' + saved.numCallouts);
+
         //upsertAccounts(pf, pj);
 
         //updateLastSync(orgs);
@@ -49,110 +50,62 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                     continue;
             }
 
-            Http http = new Http();
-            HttpRequest req =  new HttpRequest();
-            HttpResponse res = new HttpResponse();
-            Boolean hasNext = true;
-
-            loopCallouts(acct, a);
-
-            for(; saved.numCallouts < 5; saved.numCallouts++) {
-                List<Account> found = new List<Account>();
-                if(a.LastSync__c != null) {
-                    req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
-                }
-                else {
-                    req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
-                }
-
-                System.debug('Number of callouts: ' + saved.numCallouts);
-
-                System.debug('endpoint: '+ req.getEndpoint());
-
-                req.setMethod('GET');
-                req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
-                
-                res = http.send(req);
-
-                if(res.getStatusCode() == 200) { 
-                    System.debug('Status 200');
-                    found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-                    acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-                }
-
-                page += 1; 
-
-                if(found.size() > 0 && saved.numCallouts == 4) {
-                    saved.isFinished = false;
-                    saved.org = a;
-                    saved.page = page;
-                    break;
-                }
-                
-                if(found.size() == 0 && saved.numCallouts <= 4) { 
-                    saved.isFinished = true;
-                    page = 0;
-                    saved.org = null;
-                    saved.numCallouts = 0;
-                }
-                
-                System.debug('finished ' + saved.isFinished);
-
-                /* if(found.size() == 0 || numCallouts > 50) {
-                    hasNext = false;
-                } */
-            }
-            saved.isFinished = true;
+            loopCallouts(acct, a, page);
         }
         return acct;
     }
-    public static void loopCallouts(List<Account> acct, IntegrationSetup__c a) {
-        for(; saved.numCallouts < 5; saved.numCallouts++) {
-                List<Account> found = new List<Account>();
-                if(a.LastSync__c != null) {
-                    req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
-                }
-                else {
-                    req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
-                }
+    public void loopCallouts(List<Account> acct, IntegrationSetup__c a, Integer page) {
+        for(; saved.numCallouts < limitCallouts; saved.numCallouts++) {
+            List<Account> found = new List<Account>();
 
-                System.debug('Number of callouts: ' + saved.numCallouts);
+            found = callWebService(page, a);
 
-                System.debug('endpoint: '+ req.getEndpoint());
+            page += 1; 
 
-                req.setMethod('GET');
-                req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
-                
-                res = http.send(req);
-
-                if(res.getStatusCode() == 200) { 
-                    System.debug('Status 200');
-                    found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-                    acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-                }
-
-                page += 1; 
-
-                if(found.size() > 0 && saved.numCallouts == 4) {
-                    saved.isFinished = false;
-                    saved.org = a;
-                    saved.page = page;
-                    break;
-                }
-                
-                if(found.size() == 0 && saved.numCallouts <= 4) { 
-                    saved.isFinished = true;
-                    page = 0;
-                    saved.org = null;
-                    saved.numCallouts = 0;
-                }
-                
-                System.debug('finished ' + saved.isFinished);
-
-                /* if(found.size() == 0 || numCallouts > 50) {
-                    hasNext = false;
-                } */
+            if(found.size() > 0 && saved.numCallouts == limitCallouts - 1) {
+                saved.isFinished = false;
+                saved.org = a;
+                saved.page = page;
+                break;
             }
+            
+            if(found.size() == 0 && saved.numCallouts <= limitCallouts - 1) { 
+                saved.isFinished = true;
+                page = 0;
+                saved.org = null;
+            }
+            
+            System.debug('finished ' + saved.isFinished);
+        }
+    }
+    public List<Account> callWebService(Integer page, IntegrationSetup__c a) {
+        Http http = new Http();
+        HttpRequest req =  new HttpRequest();
+        HttpResponse res = new HttpResponse();
+
+        List<Account> found = new List<Account>();
+
+        if(a.LastSync__c != null) {
+            req.setEndpoint(a.EndPointURL__c + '?LastSync=' +
+                EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
+        }
+        else {
+            req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
+        }
+
+        System.debug('endpoint: '+ req.getEndpoint());
+
+        req.setMethod('GET');
+        req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
+        
+        res = http.send(req);
+
+        if(res.getStatusCode() == 200) { 
+            System.debug('Status 200');
+            found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+            acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+        }
+        return found;
     }
     public static List<Account> splitAccounts(List<Account> acct, String type) {
         List<Account> separated = new List<Account>();

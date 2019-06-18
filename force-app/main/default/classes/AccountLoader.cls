@@ -8,7 +8,7 @@ global with sharing class AccountLoader {
         String pagina = request.params.get('Pagina');
         Integer numPage;
         Integer offSet = 0;
-        Integer limitLoad = 2;
+        Integer limitLoad = 75;
         List<Account> result = new List<Account>();
 
         if(pagina == null) {
