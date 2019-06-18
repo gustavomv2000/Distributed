@@ -1,7 +1,6 @@
 global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable, Database.stateful {
 
-    global Boolean isFinished = true;
-    global Integer numCallouts = 0;
+    global Auxiliar saved = new Auxiliar();
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
         System.debug('Start');
@@ -19,7 +18,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         List<Account> pj = new List<Account>();
         String pftipo = 'pf';
         String pjtipo = 'pj';
-        Integer page = 0;
+        Integer page = saved.page;
         
         acct = addAccountsFromOrg(orgs, acct, page);
 
@@ -29,28 +28,35 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
 
         pj = splitAccounts(acct, pjtipo);
         
-        System.debug('callouts: ' + numCallouts);
+        System.debug('callouts: ' + saved.numCallouts);
         //upsertAccounts(pf, pj);
 
         //updateLastSync(orgs);
     }    
     global void finish(Database.BatchableContext bc){
-        /* if(isFinished == false) {
-            Database.executeBatch(new LoadAccounts(),1);
-        } */
+        if(saved.isFinished == false) {
+            Database.executeBatch(this);
+        }
     } 
     global void execute(SchedulableContext sc) {
         Database.executeBatch(this);
     }
     public List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct, Integer page) {
-        for(IntegrationSetup__c a : orgs) {    
+        for(IntegrationSetup__c a : orgs) {     
+
+            if(saved.org != null) {
+                if(a != saved.org) 
+                    continue;
+            }
 
             Http http = new Http();
             HttpRequest req =  new HttpRequest();
             HttpResponse res = new HttpResponse();
             Boolean hasNext = true;
 
-            for(; numCallouts < 100; numCallouts++) {
+            loopCallouts(acct, a);
+
+            for(; saved.numCallouts < 5; saved.numCallouts++) {
                 List<Account> found = new List<Account>();
                 if(a.LastSync__c != null) {
                     req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
@@ -59,7 +65,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                     req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
                 }
 
-                System.debug('Number of callouts: ' + numCallouts);
+                System.debug('Number of callouts: ' + saved.numCallouts);
 
                 System.debug('endpoint: '+ req.getEndpoint());
 
@@ -72,16 +78,81 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                     System.debug('Status 200');
                     found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
                     acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-                } 
+                }
 
-                page += 1;
+                page += 1; 
+
+                if(found.size() > 0 && saved.numCallouts == 4) {
+                    saved.isFinished = false;
+                    saved.org = a;
+                    saved.page = page;
+                    break;
+                }
+                
+                if(found.size() == 0 && saved.numCallouts <= 4) { 
+                    saved.isFinished = true;
+                    page = 0;
+                    saved.org = null;
+                    saved.numCallouts = 0;
+                }
+                
+                System.debug('finished ' + saved.isFinished);
 
                 /* if(found.size() == 0 || numCallouts > 50) {
                     hasNext = false;
                 } */
             }
+            saved.isFinished = true;
         }
         return acct;
+    }
+    public static void loopCallouts(List<Account> acct, IntegrationSetup__c a) {
+        for(; saved.numCallouts < 5; saved.numCallouts++) {
+                List<Account> found = new List<Account>();
+                if(a.LastSync__c != null) {
+                    req.setEndpoint(a.EndPointURL__c + '?LastSync=' + EncodingUtil.urlEncode(String.valueOf(a.LastSync__c), 'UTF-8') + '&Pagina=' + page);    
+                }
+                else {
+                    req.setEndpoint(a.EndPointURL__c + '?Pagina=' + page);    
+                }
+
+                System.debug('Number of callouts: ' + saved.numCallouts);
+
+                System.debug('endpoint: '+ req.getEndpoint());
+
+                req.setMethod('GET');
+                req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
+                
+                res = http.send(req);
+
+                if(res.getStatusCode() == 200) { 
+                    System.debug('Status 200');
+                    found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+                    acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+                }
+
+                page += 1; 
+
+                if(found.size() > 0 && saved.numCallouts == 4) {
+                    saved.isFinished = false;
+                    saved.org = a;
+                    saved.page = page;
+                    break;
+                }
+                
+                if(found.size() == 0 && saved.numCallouts <= 4) { 
+                    saved.isFinished = true;
+                    page = 0;
+                    saved.org = null;
+                    saved.numCallouts = 0;
+                }
+                
+                System.debug('finished ' + saved.isFinished);
+
+                /* if(found.size() == 0 || numCallouts > 50) {
+                    hasNext = false;
+                } */
+            }
     }
     public static List<Account> splitAccounts(List<Account> acct, String type) {
         List<Account> separated = new List<Account>();
