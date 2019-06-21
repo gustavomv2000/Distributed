@@ -12,7 +12,6 @@ public with sharing class Token {
         + '&password=' + a.Password__c + a.Token__c);
 
         response = http.send(request);
-        system.debug('After send request');
 
         if(response.getStatusCode() == 200) {
             system.debug('response '+ response.getBody());

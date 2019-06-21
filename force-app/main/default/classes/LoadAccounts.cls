@@ -147,30 +147,30 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         return separated;
     }
-    /* public static void upsertAccounts(List<Account> pf, List<Account> pj) {
+    public static void upsertAccounts(List<Account> pf, List<Account> pj) {
         try {
-            System.debug('pj: '+pj);
+            //System.debug('pj: '+pj);
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
             System.debug('adds '+pjAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            update orgs;
+            //System.debug('Contas a adicionar: ' + contador);
+            //update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CNPJ failed '+ e.getMessage());
         }
         try {
-            System.debug('pf: '+pf);
+            //System.debug('pf: '+pf);
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
             System.debug('adds '+pfAdd);
-            System.debug('Contas a adicionar: ' + contador);
-            update orgs;
+            //System.debug('Contas a adicionar: ' + contador);
+            //update orgs;
         }
         catch(Exception e) {
             System.debug('Upsert CPF failed '+ e.getMessage());
         }
-    } */
+    }
     public static void updateLastSync(List<IntegrationSetup__c> orgs) {
         for(IntegrationSetup__c a : orgs) {
             a.LastSync__c = System.now();
