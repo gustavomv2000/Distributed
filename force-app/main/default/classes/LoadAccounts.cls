@@ -1,7 +1,7 @@
 global class LoadAccounts implements Database.Batchable<sObject>, Database.AllowsCallouts, Schedulable, Database.stateful {
 
     global Auxiliar saved = new Auxiliar();
-    global Integer limitCallouts = 2;
+    global Integer limitCallouts = 99;
     global List<Account> acct = new List<Account>();
 
     global Database.QueryLocator start(Database.BatchableContext bc) {
@@ -13,7 +13,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
 
         return Database.getQueryLocator(query);
     }
-    global void execute(Database.BatchableContext bc, List<IntegrationSetup__c> orgs){
+    global void execute(Database.BatchableContext bc, List<IntegrationSetup__c> orgs) {
         List<Account> pf = new List<Account>();
         List<Account> pj = new List<Account>();
         String pftipo = 'pf';
@@ -25,16 +25,20 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         System.debug('Contas a adicionar: ' + acct.size());
 
         pf = splitAccounts(acct, pftipo);
+        System.debug('Contas pf a adicionar: '+ pf.size());
 
         pj = splitAccounts(acct, pjtipo);
+        System.debug('Contas pj a adicionar: ' + pj.size());
         
         System.debug('callouts: ' + saved.numCallouts);
-
+        saved.numCallouts = 0;
+        
         //upsertAccounts(pf, pj);
 
         //updateLastSync(orgs);
     }    
     global void finish(Database.BatchableContext bc){
+        System.debug('Finish value of isFinished: ' + saved.isFinished);
         if(saved.isFinished == false) {
             Database.executeBatch(this);
         }
@@ -44,45 +48,61 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
     }
     public List<Account> addAccountsFromOrg(List<IntegrationSetup__c> orgs, List<Account> acct, Integer page) {
         for(IntegrationSetup__c a : orgs) {     
-
+            if(saved.isFinished == true) {
+                saved.page = 0;
+                page = 0;
+                saved.org = null;
+                saved.isFinished = false;
+            }
+            
             if(saved.org != null) {
                 if(a != saved.org) 
                     continue;
             }
 
-            loopCallouts(acct, a, page);
+            String token = Token.getToken(a);
+
+            saved.numCallouts += 1;
+
+            loopCallouts(acct, a, page, token);
         }
+        System.debug('tamanho lista org: ' + orgs.size());
+        System.debug('tamanho savedorgs: ' + saved.numOrgs);
+        if(saved.numOrgs == orgs.size()) {
+            saved.isFinished = true;
+        }
+
         return acct;
     }
-    public void loopCallouts(List<Account> acct, IntegrationSetup__c a, Integer page) {
+    public void loopCallouts(List<Account> acct, IntegrationSetup__c a, Integer page, String token) {
         for(; saved.numCallouts < limitCallouts; saved.numCallouts++) {
             List<Account> found = new List<Account>();
 
-            found = callWebService(page, a);
+            found = callWebService(page, a, token);
+            System.debug('Contas por callout: ' + found.size());
 
             page += 1; 
 
-            if(found.size() > 0 && saved.numCallouts == limitCallouts - 1) {
-                saved.isFinished = false;
+            if(found.size() > 0) {
                 saved.org = a;
                 saved.page = page;
+            }
+
+            if(found.size() == 0) { 
+                saved.isFinished = true;
+                saved.page = 0;
+                saved.org = null;
+                saved.numOrgs = saved.numOrgs + 1;
                 break;
             }
             
-            if(found.size() == 0 && saved.numCallouts <= limitCallouts - 1) { 
-                saved.isFinished = true;
-                page = 0;
-                saved.org = null;
-            }
-            
-            System.debug('finished ' + saved.isFinished);
+            System.debug('finished (for de callouts)' + saved.isFinished);
         }
     }
-    public List<Account> callWebService(Integer page, IntegrationSetup__c a) {
+    public List<Account> callWebService(Integer page, IntegrationSetup__c a, String token) {
         Http http = new Http();
         HttpRequest req =  new HttpRequest();
         HttpResponse res = new HttpResponse();
-
         List<Account> found = new List<Account>();
 
         if(a.LastSync__c != null) {
@@ -96,12 +116,10 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         System.debug('endpoint: '+ req.getEndpoint());
 
         req.setMethod('GET');
-        req.setHeader('Authorization', 'Bearer ' + Token.getToken(a));
-        
+        req.setHeader('Authorization', 'Bearer ' + token);
         res = http.send(req);
 
         if(res.getStatusCode() == 200) { 
-            System.debug('Status 200');
             found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
             acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
         }

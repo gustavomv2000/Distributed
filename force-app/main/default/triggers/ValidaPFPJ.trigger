@@ -26,7 +26,6 @@ trigger ValidaPFPJ on Account (before insert, before update) {
                 if(Valida.validaCNPJ(a.CNPJ__c)) {
                     a.CPF__c = null;
                     a.CNPJ__c = a.CNPJ__c.replaceAll('\\D','');
-                    System.debug('Linha 34');
                     a.CNPJ__c = Valida.formatCNPJ(a.CNPJ__c);
                 }
                 else {
