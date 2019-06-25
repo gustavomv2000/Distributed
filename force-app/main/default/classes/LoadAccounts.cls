@@ -25,17 +25,25 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         System.debug('Contas a adicionar: ' + acct.size());
 
         pf = splitAccounts(acct, pftipo);
-        System.debug('Contas pf a adicionar: '+ pf.size());
+
+        System.debug('lista pf antes: ' + pf.size());
+
+        pf = dateVerificationPf(pf);
 
         pj = splitAccounts(acct, pjtipo);
-        System.debug('Contas pj a adicionar: ' + pj.size());
+
+        System.debug('lista pj antes: ' + pj.size());
+
+        pj = dateVerificationPj(pj);
+
+        System.debug('lista pf: ' + pf.size() + ' lista pj: ' + pj.size());
+        System.debug('Contas a adicionar após verificação de data: ' + (pf.size() + pj.size()));
         
-        System.debug('callouts: ' + saved.numCallouts);
         saved.numCallouts = 0;
         
-        //upsertAccounts(pf, pj);
+        upsertAccounts(pf, pj);
 
-        //updateLastSync(orgs);
+        updateLastSync(orgs);
     }    
     global void finish(Database.BatchableContext bc){
         System.debug('Finish value of isFinished: ' + saved.isFinished);
@@ -79,7 +87,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
             List<Account> found = new List<Account>();
 
             found = callWebService(page, a, token);
-            System.debug('Contas por callout: ' + found.size());
+            //System.debug('Contas por callout: ' + found.size());
 
             page += 1; 
 
@@ -96,7 +104,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 break;
             }
             
-            System.debug('finished (for de callouts)' + saved.isFinished);
+            //System.debug('finished (for de callouts)' + saved.isFinished);
         }
     }
     public List<Account> callWebService(Integer page, IntegrationSetup__c a, String token) {
@@ -119,10 +127,20 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         req.setHeader('Authorization', 'Bearer ' + token);
         res = http.send(req);
 
-        if(res.getStatusCode() == 200) { 
-            found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
-            acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+        try {
+            if(res.getStatusCode() == 200) { 
+                found.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+                acct.addAll((List<Account>) JSON.deserialize(res.getBody(), List<Account>.class));
+            }
         }
+        catch(Exception e) {
+            if(res.getStatusCode() == 200) {
+                Map<String, String> mapa = (((Map<String, String>) JSON.deserialize(res.getBody(), Map<String, String>.class)));
+                found.addAll((List<Account>) JSON.deserialize(mapa.get('accounts'), List<Account>.class));
+                acct.addAll((List<Account>) JSON.deserialize(mapa.get('accounts'), List<Account>.class));
+            }
+        }
+
         return found;
     }
     public static List<Account> splitAccounts(List<Account> acct, String type) {
@@ -149,26 +167,22 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
     }
     public static void upsertAccounts(List<Account> pf, List<Account> pj) {
         try {
-            //System.debug('pj: '+pj);
-            Schema.SObjectField loadpj = Account.CNPJ__c;
-            Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
-            System.debug('adds '+pjAdd);
-            //System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
-        }
-        catch(Exception e) {
-            System.debug('Upsert CNPJ failed '+ e.getMessage());
-        }
-        try {
-            //System.debug('pf: '+pf);
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
             System.debug('adds '+pfAdd);
-            //System.debug('Contas a adicionar: ' + contador);
-            //update orgs;
+            System.debug('Contas a adicionar: ' + pfAdd.size());
         }
         catch(Exception e) {
             System.debug('Upsert CPF failed '+ e.getMessage());
+        }
+        try {
+            Schema.SObjectField loadpj = Account.CNPJ__c;
+            Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
+            System.debug('adds '+pjAdd);
+            System.debug('Contas a adicionar: ' + pjAdd.size());
+        }
+        catch(Exception e) {
+            System.debug('Upsert CNPJ failed '+ e.getMessage());
         }
     }
     public static void updateLastSync(List<IntegrationSetup__c> orgs) {
@@ -177,4 +191,77 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         update orgs;
     }
-}
+    public static List<Account> dateVerificationPf(List<Account> pf) {
+        List<Account> all = [SELECT Tipo__c, CPF__c, CNPJ__c, Id, LastModifiedDate FROM Account WHERE CPF__c IN :stringsKeysPf(pf)];
+
+
+        List<Account> acct = new List<Account>();
+
+        /* for(Account ac : pf) {
+            for(Account a : all) {
+                if(ac.CPF__c == a.CPF__c) {
+                    if(a.LastModifiedDate < ac.LastModifiedDate) {
+                        acct.add(ac);
+                    }
+                }
+            }
+        } */
+
+        for(Account a : all) {
+            for(Integer i = pf.size() - 1; i >= 0; i--) {
+                if(pf[i].CPF__c == a.CPF__c) {
+                    if(a.LastModifiedDate > pf[i].LastModifiedDate) {
+                        pf.remove(i);
+                    }
+                }
+            }
+        }
+
+        System.debug('data pf: ' + acct.size());
+
+        return pf;
+    }
+    public static List<Account> dateVerificationPj(List<Account> pj) {
+        List<Account> all = [SELECT Tipo__c, CPF__c, CNPJ__c, Id, LastModifiedDate FROM Account WHERE CNPJ__c IN :stringsKeysPj(pj)];
+
+
+        List<Account> acct = new List<Account>();
+
+        /* for(Account ac : pj) {
+            for(Account a : all) {
+                if(ac.CNPJ__c == a.CNPJ__c) {
+                    if(a.LastModifiedDate < ac.LastModifiedDate) {
+                        acct.add(ac);
+                    }
+                }
+            }
+        } */
+
+        for(Account a : all) {
+            for(Integer i = pj.size() - 1; i >= 0; i--) {
+                if(pj[i].CNPJ__c == a.CNPJ__c) {
+                    if(a.LastModifiedDate > pj[i].LastModifiedDate) {
+                        pj.remove(i);
+                    }
+                }
+            }
+        }
+        return pj;
+    }
+    public static List<String> stringsKeysPf(List<Account> type) {
+        List<String> key = new List<String>();
+
+        for(Account a : type) {
+            key.add(a.CPF__c);
+        }
+        return key;
+    }
+    public static List<String> stringsKeysPj(List<Account> type) {
+        List<String> key = new List<String>();
+
+        for(Account a : type) {
+            key.add(a.CNPJ__c);
+        }
+        return key;
+    }
+}   

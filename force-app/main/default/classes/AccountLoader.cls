@@ -4,32 +4,38 @@ global with sharing class AccountLoader {
     global static List<Account> getRecord() {
         
         RestRequest request = RestContext.request;
+        System.debug(request);
         String LastSync = request.params.get('LastSync');
+        System.debug(LastSync); 
         String pagina = request.params.get('Pagina');
+        System.debug(pagina);
+        //Integer page = Integer.valueOf(pagina);      
         Integer numPage;
-        Integer offSet = 0;
+        System.debug(numPage);
         Integer limitLoad = 10;
+        System.debug(limitLoad);
+
         List<Account> result = new List<Account>();
 
-        if(pagina == null) {
-            System.debug('Pagina 0');
-            numPage = 0;
-        }
-        else {
-            numPage = Integer.valueOf(pagina);
-        }
 
-        offSet = numPage * limitload;
+        if(pagina == null) 
+            numPage = 0;
+        else 
+            //Integer page = Integer.valueOf(pagina);
+            numPage = Integer.valueOf(pagina);
+
+        List<Account> allAccounts = new List<Account>();
 
         try {
-            result =  [SELECT Tipo__c,CNPJ__c,CPF__c,LastUpdate__c,SystemModStamp,Name FROM Account WHERE SystemModStamp >= :Datetime.valueOfGmt(LastSync) ORDER BY SystemModStamp  ASC LIMIT :limitLoad OFFSET :offSet];
+            allAccounts = [SELECT Tipo__c,CNPJ__c,CPF__c,LastUpdate__c,SystemModStamp,Name, LastModifiedDate FROM Account WHERE SystemModStamp >= :Datetime.valueOf(LastSync) ];
         }
         catch(Exception e) {
-            result =  [SELECT Tipo__c,CNPJ__c,CPF__c,LastUpdate__c,SystemModStamp,Name FROM Account ORDER BY SystemModStamp ASC LIMIT :limitLoad OFFSET :offSet];
-            System.debug('Erro '+e.getMessage());
+            allAccounts = [SELECT Tipo__c,CNPJ__c,CPF__c,LastUpdate__c,SystemModStamp,Name, LastModifiedDate FROM Account ];
         }
-
+        for(Integer i = numPage*limitLoad; i < (numPage*limitLoad)+10 && i < allAccounts.size(); i++) {
+            if(numPage*limitLoad <= allAccounts.size()) 
+                result.add(allAccounts[i]);
+        }
         return result;
-
     }
 }
