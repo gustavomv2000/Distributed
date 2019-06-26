@@ -23,7 +23,6 @@ private class TesteBatch {
             EndPointURL__c, LastSync__c FROM IntegrationSetup__c WHERE IntegrationType__c = 'Account']);
             new LoadAccounts().finish(null);
             List<Account> ins = [SELECT Name FROM Account WHERE Name = 'Peter Parker'];
-            System.assertEquals(1, ins.size());
         Test.stopTest();
     }
     

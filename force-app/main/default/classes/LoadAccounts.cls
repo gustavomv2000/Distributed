@@ -22,22 +22,15 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         
         acct = addAccountsFromOrg(orgs, acct, page);
 
-        System.debug('Contas a adicionar: ' + acct.size());
-
         pf = splitAccounts(acct, pftipo);
-
-        System.debug('lista pf antes: ' + pf.size());
 
         pf = dateVerificationPf(pf);
 
         pj = splitAccounts(acct, pjtipo);
 
-        System.debug('lista pj antes: ' + pj.size());
-
         pj = dateVerificationPj(pj);
 
-        System.debug('lista pf: ' + pf.size() + ' lista pj: ' + pj.size());
-        System.debug('Contas a adicionar após verificação de data: ' + (pf.size() + pj.size()));
+        System.debug('Contas a adicionar após verificação: ' + (pf.size() + pj.size()));
         
         saved.numCallouts = 0;
         
@@ -103,8 +96,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 saved.numOrgs = saved.numOrgs + 1;
                 break;
             }
-            
-            //System.debug('finished (for de callouts)' + saved.isFinished);
         }
     }
     public List<Account> callWebService(Integer page, IntegrationSetup__c a, String token) {
@@ -148,7 +139,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         if(type.equals('pf')) {
             for(Account ac : acct) {
                 ac.Id = null;
-                //System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Física' || ac.Tipo__c == 'PessoaFisica') {
                     separated.add(ac);
                 }
@@ -157,7 +147,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         if(type.equals('pj')) {
             for(Account ac : acct) {
                 ac.Id = null;
-                //System.debug('Nome'+ ac.name);
                 if(ac.Tipo__c == 'Pessoa Jurídica' || ac.Tipo__c == 'PessoaJuridica') {
                     separated.add(ac);
                 }
@@ -169,7 +158,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         try {
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
-            System.debug('adds '+pfAdd);
             System.debug('Contas a adicionar: ' + pfAdd.size());
         }
         catch(Exception e) {
@@ -178,7 +166,6 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         try {
             Schema.SObjectField loadpj = Account.CNPJ__c;
             Database.UpsertResult[] pjAdd = Database.upsert(pj, loadpj, false);
-            System.debug('adds '+pjAdd);
             System.debug('Contas a adicionar: ' + pjAdd.size());
         }
         catch(Exception e) {
@@ -194,18 +181,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
     public static List<Account> dateVerificationPf(List<Account> pf) {
         List<Account> all = [SELECT Tipo__c, CPF__c, CNPJ__c, Id, LastModifiedDate FROM Account WHERE CPF__c IN :stringsKeysPf(pf)];
 
-
         List<Account> acct = new List<Account>();
-
-        /* for(Account ac : pf) {
-            for(Account a : all) {
-                if(ac.CPF__c == a.CPF__c) {
-                    if(a.LastModifiedDate < ac.LastModifiedDate) {
-                        acct.add(ac);
-                    }
-                }
-            }
-        } */
 
         for(Account a : all) {
             for(Integer i = pf.size() - 1; i >= 0; i--) {
@@ -216,26 +192,12 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
                 }
             }
         }
-
-        System.debug('data pf: ' + acct.size());
-
         return pf;
     }
     public static List<Account> dateVerificationPj(List<Account> pj) {
         List<Account> all = [SELECT Tipo__c, CPF__c, CNPJ__c, Id, LastModifiedDate FROM Account WHERE CNPJ__c IN :stringsKeysPj(pj)];
 
-
         List<Account> acct = new List<Account>();
-
-        /* for(Account ac : pj) {
-            for(Account a : all) {
-                if(ac.CNPJ__c == a.CNPJ__c) {
-                    if(a.LastModifiedDate < ac.LastModifiedDate) {
-                        acct.add(ac);
-                    }
-                }
-            }
-        } */
 
         for(Account a : all) {
             for(Integer i = pj.size() - 1; i >= 0; i--) {

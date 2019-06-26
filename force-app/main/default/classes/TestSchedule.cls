@@ -19,7 +19,7 @@ private class TestSchedule {
         Test.startTest();
         LoadAccounts pa= new LoadAccounts();
         String cronStr = '0 30 * * * ?';
-        System.schedule('teste', '0 0 * * * ?', pa);
+        System.schedule('aaa', '0 0 * * * ?', pa);
         Test.stopTest();
     }
     
