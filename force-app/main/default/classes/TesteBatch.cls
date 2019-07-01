@@ -13,7 +13,20 @@ private class TesteBatch {
             org.IntegrationType__c = 'Account';
             //orgs.LastSync__c = 
             orgs.add(org);
-            insert orgs;
+        
+        IntegrationSetup__c org1 = new IntegrationSetup__c();
+            org.EndPointURL__c='https://na132.salesforce.com/services/apexrest/Accounts';
+            org.UserName__c='zack.correa%40nescara.academy.0001.com';
+            org.Password__c='zack1234';
+            org.Token__c='LPtBO3jUsHqN72tshS3EVYOs';
+            org.ClientId__c='3MVG9IHf89I1t8hqhCZpj2S2z7EhHXtP177jdQqg0snMovoPjgqzKzDaITWC_T5GqTj4zkKk010hjt4Q08xL4';
+            org.ClientSecret__c='09E08E7ADC7F379025FE0F114F508B80C6D590AC5E49EC6CF740875E8E2FF4B9';
+            org.IntegrationType__c = 'Account';
+            //orgs.LastSync__c = 
+            orgs.add(org1);
+
+        insert orgs;
+        
     }
     static testmethod void test() { 
         Test.setMock(HttpCalloutMock.class, new TesteBatch2());
@@ -25,5 +38,4 @@ private class TesteBatch {
             List<Account> ins = [SELECT Name FROM Account WHERE Name = 'Peter Parker'];
         Test.stopTest();
     }
-    
 }

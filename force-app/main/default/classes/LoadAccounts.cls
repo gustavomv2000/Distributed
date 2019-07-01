@@ -30,7 +30,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
 
         pj = dateVerificationPj(pj);
 
-        System.debug('Contas a adicionar após verificação: ' + (pf.size() + pj.size()));
+        //System.debug('Contas a adicionar após verificação: ' + (pf.size() + pj.size()));
         
         saved.numCallouts = 0;
         
@@ -158,7 +158,7 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         try {
             Schema.SObjectField loadpf = Account.CPF__c;
             Database.UpsertResult[] pfAdd = Database.upsert(pf, loadpf, false);
-            System.debug('Contas a adicionar: ' + pfAdd.size());
+            //0System.debug('Contas a adicionar: ' + pfAdd.size());
         }
         catch(Exception e) {
             System.debug('Upsert CPF failed '+ e.getMessage());
@@ -226,4 +226,4 @@ global class LoadAccounts implements Database.Batchable<sObject>, Database.Allow
         }
         return key;
     }
-}   
+}
